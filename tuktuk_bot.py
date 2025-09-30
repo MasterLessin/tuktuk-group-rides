@@ -13,6 +13,8 @@ import os
 import logging
 import sqlite3
 import time
+print("TELEGRAM_BOT_TOKEN from env:", os.environ.get("TELEGRAM_BOT_TOKEN"))
+
 from typing import Optional
 
 from telegram import (
@@ -401,3 +403,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
