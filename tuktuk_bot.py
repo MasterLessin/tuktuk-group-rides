@@ -357,7 +357,7 @@ async def complete_ride(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ---------- main ----------
 def main():
-    token = os.environ.get("8433030179:AAHjkQOkhUMkJmnRFuFwl7fU0EWa-8gTMhU")
+    token = os.environ.get(8433030179:AAHjkQOkhUMkJmnRFuFwl7fU0EWa-8gTMhU)
     if not token:
         print("Error: set TELEGRAM_BOT_TOKEN environment variable first.")
         return
@@ -401,5 +401,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
