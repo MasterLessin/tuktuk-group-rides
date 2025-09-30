@@ -4,8 +4,8 @@ Cash-only MVP Telegram bot for TukTuk group rides (starter).
 - Python 3.10+
 - pip install python-telegram-bot
 - Run:
-    set TELEGRAM_BOT_TOKEN="8433030179:AAHjkQOkhUMkJmnRFuFwl7fU0EWa-8gTMhU"
-    set ADMIN_ID="35303487"
+    set TELEGRAM_BOT_TOKEN="your-telegram-bot-token"
+    set ADMIN_ID="your-numeric-telegram-id"
     python tuktuk_bot.py
 """
 
@@ -283,7 +283,7 @@ async def accept_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ---------- Admin ----------
 async def set_dispatch_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    admin_id = os.environ.get("353034857")
+    admin_id = os.environ.get("ADMIN_ID")
     if not admin_id:
         await update.message.reply_text("ADMIN_ID not configured. Set ADMIN_ID before starting bot.")
         return
@@ -357,7 +357,7 @@ async def complete_ride(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ---------- main ----------
 def main():
-    token = os.environ.get(8433030179:AAHjkQOkhUMkJmnRFuFwl7fU0EWa-8gTMhU)
+    token = os.environ.get("TELEGRAM_BOT_TOKEN")
     if not token:
         print("Error: set TELEGRAM_BOT_TOKEN environment variable first.")
         return
@@ -401,6 +401,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
