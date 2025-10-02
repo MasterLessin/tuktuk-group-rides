@@ -1,21 +1,21 @@
 """
 tuktuk_bot.py
 Cash-only MVP Telegram bot for TukTuk group rides (starter).
+
+Requirements:
 - Python 3.10+
-- pip install python-telegram-bot
-- Run:
-    set TELEGRAM_BOT_TOKEN="your-telegram-bot-token"
-    set ADMIN_ID="your-numeric-telegram-id"
-    python tuktuk_bot.py
+- python-telegram-bot==20.3
+
+For deployment (Railway/Heroku): set environment variables
+TELEGRAM_BOT_TOKEN and ADMIN_ID in the host dashboard.
 """
 
 import os
 import logging
 import sqlite3
 import time
-print("TELEGRAM_BOT_TOKEN from env:", os.environ.get("TELEGRAM_BOT_TOKEN"))
-
 from typing import Optional
+from datetime import datetime
 
 from telegram import (
     Update, KeyboardButton, ReplyKeyboardMarkup,
@@ -109,6 +109,12 @@ class DB:
         self.cur.execute("SELECT id, telegram_id, name, phone, reg_no, status, lat, lng FROM drivers WHERE telegram_id=?", (tg_id,))
         return self.cur.fetchone()
 
+    def get_driver_by_id(self, driver_id):
+        if not driver_id:
+            return None
+        self.cur.execute("SELECT id, telegram_id, name, phone, reg_no FROM drivers WHERE id=?", (driver_id,))
+        return self.cur.fetchone()
+
     def get_online_drivers(self):
         self.cur.execute("SELECT id, telegram_id, name, phone, reg_no, status, lat, lng FROM drivers WHERE status='online'")
         return self.cur.fetchall()
@@ -126,6 +132,13 @@ class DB:
     def get_ride(self, ride_id):
         self.cur.execute("SELECT * FROM rides WHERE id=?", (ride_id,))
         return self.cur.fetchone()
+
+    def get_rides_by_rider(self, rider_tg_id, limit=20):
+        self.cur.execute("""
+            SELECT id, pickup_lat, pickup_lng, drop_lat, drop_lng, group_size, status, assigned_driver_id, created_at
+            FROM rides WHERE rider_tg_id=? ORDER BY created_at DESC LIMIT ?
+        """, (rider_tg_id, limit))
+        return self.cur.fetchall()
 
     def assign_ride_if_unassigned(self, ride_id, driver_id):
         self.cur.execute("""
@@ -357,6 +370,49 @@ async def complete_ride(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"Ride {ride_id} marked as completed. Thanks!")
 
 
+# ---------- My Rides & Help handlers ----------
+async def my_rides(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    rider_id = update.effective_user.id
+    rides = db.get_rides_by_rider(rider_id)
+    if not rides:
+        await update.message.reply_text("You have no rides yet.")
+        return
+
+    lines = []
+    for r in rides:
+        # r: id, pickup_lat, pickup_lng, drop_lat, drop_lng, group_size, status, assigned_driver_id, created_at
+        ride_id, p_lat, p_lng, d_lat, d_lng, group_size, status, assigned_driver_id, created_at = r
+        created = datetime.fromtimestamp(created_at).strftime("%Y-%m-%d %H:%M:%S")
+        line = f"Ride ID: {ride_id}\nStatus: {status}\nGroup: {group_size}\nPickup: ({p_lat:.5f}, {p_lng:.5f})"
+        if d_lat:
+            line += f"\nDrop: ({d_lat:.5f}, {d_lng:.5f})"
+        if assigned_driver_id:
+            drv = db.get_driver_by_id(assigned_driver_id)
+            if drv:
+                line += f"\nDriver: {drv[2]} | {drv[3]} | {drv[4]}"
+            else:
+                line += f"\nDriver ID: {assigned_driver_id}"
+        line += f"\nCreated: {created}"
+        lines.append(line)
+
+    msg = "\n\n".join(lines)
+    await update.message.reply_text(msg)
+
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    txt = (
+        "TukTuk Bot Help\n\n"
+        "Use the buttons:\n"
+        "• Request Group Ride — start a new group ride (share location, choose group size, confirm).\n"
+        "• My Rides — see your recent rides and statuses.\n"
+        "• Help — show this message.\n\n"
+        "Commands:\n"
+        "/driver_start — register as a driver\n"
+        "/go_online — set yourself online (drivers)\n"
+    )
+    await update.message.reply_text(txt)
+
+
 # ---------- main ----------
 def main():
     token = os.environ.get("TELEGRAM_BOT_TOKEN")
@@ -366,11 +422,17 @@ def main():
 
     app = ApplicationBuilder().token(token).build()
 
+    # basic handlers
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("set_dispatch_group", set_dispatch_group))
+    app.add_handler(CommandHandler("help", help_command))
 
+    # conversation: add MessageHandler as an entry point so keyboard button works
     ride_conv = ConversationHandler(
-        entry_points=[CommandHandler("request", request_start)],
+        entry_points=[
+            CommandHandler("request", request_start),
+            MessageHandler(filters.Regex(r"^Request Group Ride$"), request_start)
+        ],
         states={
             PICKUP: [MessageHandler(filters.LOCATION, pickup_received)],
             DROP: [MessageHandler(filters.LOCATION | filters.Regex("^Skip$"), drop_received)],
@@ -381,6 +443,7 @@ def main():
     )
     app.add_handler(ride_conv)
 
+    # driver registration
     drv_conv = ConversationHandler(
         entry_points=[CommandHandler("driver_start", driver_start)],
         states={
@@ -392,6 +455,11 @@ def main():
     )
     app.add_handler(drv_conv)
 
+    # button handlers for keyboard
+    app.add_handler(MessageHandler(filters.Regex(r"^My Rides$"), my_rides))
+    app.add_handler(MessageHandler(filters.Regex(r"^Help$"), help_command))
+
+    # driver actions & callbacks
     app.add_handler(CommandHandler("go_online", go_online))
     app.add_handler(MessageHandler(filters.LOCATION, location_handler))
     app.add_handler(CallbackQueryHandler(accept_callback, pattern="^accept:"))
@@ -403,4 +471,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
