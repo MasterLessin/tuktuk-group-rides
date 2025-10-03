@@ -1,38 +1,6 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
 from typing import Optional
 
-def main_menu_keyboard():
-    """Main menu for riders"""
-    kb = ReplyKeyboardMarkup([
-        ["🚖 Request Ride", "📋 My Rides"],
-        ["👨‍✈️ Driver Mode", "🆘 Help"],
-        ["ℹ️ About"]
-    ], resize_keyboard=True, one_time_keyboard=False)
-    return kb
-
-def driver_main_menu_keyboard():
-    """Main menu for drivers"""
-    kb = ReplyKeyboardMarkup([
-        ["🟢 Go Online", "📍 Update Location"],
-        ["📊 My Jobs", "🆘 Help"],
-        ["👤 Switch to Rider"]
-    ], resize_keyboard=True, one_time_keyboard=False)
-    return kb
-
-def cancel_keyboard():
-    """Cancel button for various flows"""
-    kb = ReplyKeyboardMarkup([
-        ["❌ Cancel"]
-    ], resize_keyboard=True, one_time_keyboard=True)
-    return kb
-
-def back_to_main_keyboard():
-    """Back to main menu"""
-    kb = ReplyKeyboardMarkup([
-        ["⬅️ Back to Main Menu"]
-    ], resize_keyboard=True, one_time_keyboard=True)
-    return kb
-
 def mk_location_keyboard():
     kb = ReplyKeyboardMarkup([[KeyboardButton('Share Location', request_location=True)]], one_time_keyboard=True, resize_keyboard=True)
     return kb
