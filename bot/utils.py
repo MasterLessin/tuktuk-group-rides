@@ -5,7 +5,8 @@ def main_menu_keyboard():
     """Main menu for riders"""
     kb = ReplyKeyboardMarkup([
         ["🚖 Request Ride", "📋 My Rides"],
-        ["🆘 Help", "ℹ️ About"]
+        ["👨‍✈️ Driver Mode", "🆘 Help"],
+        ["ℹ️ About"]
     ], resize_keyboard=True, one_time_keyboard=False)
     return kb
 
@@ -16,13 +17,6 @@ def driver_main_menu_keyboard():
         ["📊 My Jobs", "🆘 Help"],
         ["👤 Switch to Rider"]
     ], resize_keyboard=True, one_time_keyboard=False)
-    return kb
-
-def rider_driver_choice_keyboard():
-    """Choice between rider and driver"""
-    kb = ReplyKeyboardMarkup([
-        ["🚖 I'm a Rider", "👨‍✈️ I'm a Driver"]
-    ], resize_keyboard=True, one_time_keyboard=True)
     return kb
 
 def cancel_keyboard():
