@@ -1,7 +1,7 @@
 import math, time
 from telegram import Update
 from telegram.ext import ContextTypes
-from .utils import paginate_kb
+from .utils import paginate_kb, main_menu_keyboard
 
 PAGE_SIZE = 5
 
@@ -24,8 +24,10 @@ async def send_page(target, context, user_id: int, page: int):
     total_pages = max(1, math.ceil(total / PAGE_SIZE))
     offset = (page - 1) * PAGE_SIZE
     rides = await db.get_rides_by_rider(user_id, limit=PAGE_SIZE, offset=offset)
+    
     if not rides:
-        text = 'You have no rides yet.'
+        text = '📋 You have no rides yet.'
+        kb = main_menu_keyboard()
     else:
         lines = []
         for r in rides:
@@ -39,8 +41,9 @@ async def send_page(target, context, user_id: int, page: int):
                 drop = f"Drop: {r['drop_text']}"
             lines.append(f"Ride #{r.get('id')}: Status: {r.get('status')} | Group: {r.get('group_size')} | Pickup: ({r['pickup_lat']:.5f}, {r['pickup_lng']:.5f}) | {drop}{created}")
         text = '\n\n'.join(lines)
-        text = f'Page {page}/{total_pages}\n\n' + text
-    kb = paginate_kb(page, total_pages)
+        text = f'📋 Your Rides (Page {page}/{total_pages})\n\n' + text
+        kb = paginate_kb(page, total_pages)
+    
     if hasattr(target, 'message'):
         await target.message.reply_text(text, reply_markup=kb)
     else:
