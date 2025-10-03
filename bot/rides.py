@@ -1,7 +1,7 @@
 import logging, time
-from telegram import Update, KeyboardButton, ReplyKeyboardMarkup
+from telegram import Update, KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import ContextTypes, ConversationHandler, MessageHandler, filters
-from .utils import mk_location_keyboard, group_size_buttons, confirm_buttons, accept_button_for_ride, main_menu_keyboard
+from .utils import group_size_buttons, confirm_buttons, accept_button_for_ride, main_menu_keyboard
 
 logger = logging.getLogger('tuktuk_rides')
 
@@ -9,10 +9,20 @@ PICKUP, DROP, GROUP, CONFIRM = range(4)
 
 async def request_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start the ride request conversation"""
-    kb = mk_location_keyboard()
+    # Use ReplyKeyboardRemove to clear any existing keyboards first
     await update.message.reply_text(
         '📍 Please share your pickup location using the button below:',
-        reply_markup=kb
+        reply_markup=ReplyKeyboardRemove()
+    )
+    
+    # Create a clean location keyboard without other menu items
+    location_kb = ReplyKeyboardMarkup([
+        [KeyboardButton('📍 Share Location', request_location=True)]
+    ], one_time_keyboard=True, resize_keyboard=True)
+    
+    await update.message.reply_text(
+        'Tap the button below to share your location:',
+        reply_markup=location_kb
     )
     return PICKUP
 
@@ -20,10 +30,13 @@ async def pickup_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle received pickup location"""
     if not update.message.location:
         # If user sent text instead of location, remind them to use the button
-        kb = mk_location_keyboard()
+        location_kb = ReplyKeyboardMarkup([
+            [KeyboardButton('📍 Share Location', request_location=True)]
+        ], one_time_keyboard=True, resize_keyboard=True)
+        
         await update.message.reply_text(
             '❌ Please use the "Share Location" button to send your pickup location.',
-            reply_markup=kb
+            reply_markup=location_kb
         )
         return PICKUP
     
@@ -32,16 +45,22 @@ async def pickup_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['pickup_lat'] = loc.latitude
     context.user_data['pickup_lng'] = loc.longitude
     
+    # Clear keyboard and ask for drop-off
+    await update.message.reply_text(
+        '✅ Pickup location received!',
+        reply_markup=ReplyKeyboardRemove()
+    )
+    
     # Create keyboard for drop-off location
-    kb = ReplyKeyboardMarkup([
+    dropoff_kb = ReplyKeyboardMarkup([
         [KeyboardButton('📍 Share Drop-off Location', request_location=True)],
         ['📝 Type Drop-off Address'],
         ['⏩ Skip Drop-off']
     ], one_time_keyboard=True, resize_keyboard=True)
     
     await update.message.reply_text(
-        '✅ Pickup location received!\n\nNow please share your drop-off location:',
-        reply_markup=kb
+        'Now please share your drop-off location:',
+        reply_markup=dropoff_kb
     )
     return DROP
 
@@ -72,14 +91,14 @@ async def drop_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     elif update.message.text == '❌ Cancel':
         # User cancelled address typing
-        kb = ReplyKeyboardMarkup([
+        dropoff_kb = ReplyKeyboardMarkup([
             [KeyboardButton('📍 Share Drop-off Location', request_location=True)],
             ['📝 Type Drop-off Address'],
             ['⏩ Skip Drop-off']
         ], one_time_keyboard=True, resize_keyboard=True)
         await update.message.reply_text(
             'Drop-off location selection:',
-            reply_markup=kb
+            reply_markup=dropoff_kb
         )
         return DROP
         
@@ -90,9 +109,15 @@ async def drop_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['drop_text'] = update.message.text.strip()
         drop_info = f"📍 Drop-off: {update.message.text.strip()}"
     
-    # Proceed to group size selection
+    # Clear keyboard before showing inline buttons
     await update.message.reply_text(
         f'{drop_info}\n\n👥 How many people in your group?',
+        reply_markup=ReplyKeyboardRemove()
+    )
+    
+    # Send group size selection as a separate message with inline buttons
+    await update.message.reply_text(
+        'Select group size:',
         reply_markup=group_size_buttons()
     )
     return GROUP
@@ -214,7 +239,6 @@ async def cancel_conv(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text('❌ Ride request cancelled.', reply_markup=main_menu_keyboard())
     return ConversationHandler.END
 
-# ... rest of your existing functions (accept_callback, go_online, complete_ride_cmd) remain the same
 async def accept_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -263,8 +287,16 @@ async def go_online(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text('You\'re not registered. Run /driver_start to register first.', reply_markup=main_menu_keyboard())
         return
     await db.set_driver_status(tg_id, 'online')
-    kb = mk_location_keyboard()
-    await update.message.reply_text('You\'re now ONLINE. Please share your current location so the system can find you for nearby rides.', reply_markup=kb)
+    
+    # Use clean location keyboard
+    location_kb = ReplyKeyboardMarkup([
+        [KeyboardButton('📍 Share Location', request_location=True)]
+    ], one_time_keyboard=True, resize_keyboard=True)
+    
+    await update.message.reply_text(
+        'You\'re now ONLINE. Please share your current location so the system can find you for nearby rides.',
+        reply_markup=location_kb
+    )
 
 async def complete_ride_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     args = context.args
