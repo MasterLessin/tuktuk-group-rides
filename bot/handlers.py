@@ -7,10 +7,6 @@ def register_handlers(app, db, admin_id):
     app.bot_data['db'] = db
     app.bot_data['admin_id'] = admin_id
 
-    # Start and help commands
-    app.add_handler(CommandHandler('start', start_command))
-    app.add_handler(CommandHandler('help', help_command))
-
     # registration conversation
     from .registration import DRV_NAME, DRV_REG, DRV_PHONE, driver_start, driver_name, driver_reg, driver_phone
     reg_conv = ConversationHandler(
@@ -27,7 +23,7 @@ def register_handlers(app, db, admin_id):
 
     # ride conversation
     ride_conv = ConversationHandler(
-        entry_points=[CommandHandler('request', rides.request_start)],
+        entry_points=[CommandHandler('request', rides.request_start), MessageHandler(filters.Regex(r'^Request Group Ride$'), rides.request_start)],
         states={
             rides.PICKUP: [MessageHandler(filters.LOCATION, rides.pickup_received)],
             rides.DROP: [MessageHandler(filters.LOCATION | filters.Regex('^Skip$') | filters.TEXT, rides.drop_received)],
@@ -40,6 +36,8 @@ def register_handlers(app, db, admin_id):
     app.add_handler(ride_conv)
 
     # basic commands & handlers
+    app.add_handler(CommandHandler('start', lambda u,c: u.message.reply_text('Welcome to TukTuk Group Rides! Use /request to request a ride.')))
+    app.add_handler(CommandHandler('help', lambda u,c: u.message.reply_text('Use /request to request a ride, /driver_start to register as driver, /my_rides to view history.')))
     app.add_handler(CommandHandler('set_dispatch_group', admin.set_dispatch_group))
     app.add_handler(CommandHandler('broadcast', admin.broadcast))
     app.add_handler(CommandHandler('go_online', rides.go_online))
@@ -48,44 +46,3 @@ def register_handlers(app, db, admin_id):
     app.add_handler(CallbackQueryHandler(rides.accept_callback, pattern='^accept:'))
     app.add_handler(CommandHandler('my_rides', ride_history.my_rides_cmd))
     app.add_handler(CallbackQueryHandler(ride_history.history_callback, pattern='^history:'))
-
-async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Start command"""
-    help_text = """
-🚖 Welcome to TukTuk Group Rides!
-
-Available Commands:
-/start - Show this message
-/help - Show help
-/request - Request a new ride
-/my_rides - View your ride history
-/driver_start - Register as a driver
-/go_online - Set yourself online as driver
-/complete_ride <id> - Mark ride as completed
-
-For Drivers:
-- Use /driver_start to register
-- Use /go_online to receive ride requests
-- Use /complete_ride <id> when ride is done
-    """
-    await update.message.reply_text(help_text)
-
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Help command"""
-    help_text = """
-🆘 TukTuk Bot Help
-
-For Riders:
-/request - Book a tuktuk ride
-/my_rides - View your ride history
-
-For Drivers:
-/driver_start - Register as driver
-/go_online - Go online to receive rides
-/complete_ride <id> - Mark ride as completed
-
-Admin Commands:
-/set_dispatch_group - Set driver group
-/broadcast <message> - Broadcast to drivers
-    """
-    await update.message.reply_text(help_text)
