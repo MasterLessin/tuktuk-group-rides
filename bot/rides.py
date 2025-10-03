@@ -2,78 +2,153 @@ import logging, time
 from telegram import Update, KeyboardButton, ReplyKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler, MessageHandler, filters
 from .utils import mk_location_keyboard, group_size_buttons, confirm_buttons, accept_button_for_ride, main_menu_keyboard
+
 logger = logging.getLogger('tuktuk_rides')
 
 PICKUP, DROP, GROUP, CONFIRM = range(4)
 
 async def request_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Start the ride request conversation"""
     kb = mk_location_keyboard()
-    await update.message.reply_text('Please share your pickup location (press the button):', reply_markup=kb)
+    await update.message.reply_text(
+        '📍 Please share your pickup location using the button below:',
+        reply_markup=kb
+    )
     return PICKUP
 
 async def pickup_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle received pickup location"""
     if not update.message.location:
-        await update.message.reply_text('Please use the Share Location button to send pickup coords.')
+        # If user sent text instead of location, remind them to use the button
+        kb = mk_location_keyboard()
+        await update.message.reply_text(
+            '❌ Please use the "Share Location" button to send your pickup location.',
+            reply_markup=kb
+        )
         return PICKUP
+    
+    # Store the location data
     loc = update.message.location
     context.user_data['pickup_lat'] = loc.latitude
     context.user_data['pickup_lng'] = loc.longitude
-    kb = ReplyKeyboardMarkup([[KeyboardButton('Share Drop-off Location', request_location=True)], ['Skip']], one_time_keyboard=True, resize_keyboard=True)
-    await update.message.reply_text('Got pickup. Share drop-off location or type address or press Skip.', reply_markup=kb)
+    
+    # Create keyboard for drop-off location
+    kb = ReplyKeyboardMarkup([
+        [KeyboardButton('📍 Share Drop-off Location', request_location=True)],
+        ['📝 Type Drop-off Address'],
+        ['⏩ Skip Drop-off']
+    ], one_time_keyboard=True, resize_keyboard=True)
+    
+    await update.message.reply_text(
+        '✅ Pickup location received!\n\nNow please share your drop-off location:',
+        reply_markup=kb
+    )
     return DROP
 
 async def drop_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle received drop-off location or address"""
     if update.message.location:
+        # User shared location via button
         loc = update.message.location
         context.user_data['drop_lat'] = loc.latitude
         context.user_data['drop_lng'] = loc.longitude
         context.user_data.pop('drop_text', None)
+        drop_info = f"📍 Drop-off: ({loc.latitude:.5f}, {loc.longitude:.5f})"
+        
+    elif update.message.text == '⏩ Skip Drop-off':
+        # User skipped drop-off
+        context.user_data['drop_lat'] = None
+        context.user_data['drop_lng'] = None
+        context.user_data.pop('drop_text', None)
+        drop_info = "📍 Drop-off: Not specified"
+        
+    elif update.message.text == '📝 Type Drop-off Address':
+        # User wants to type address
+        await update.message.reply_text(
+            '📝 Please type the drop-off address or landmark:',
+            reply_markup=ReplyKeyboardMarkup([['❌ Cancel']], resize_keyboard=True)
+        )
+        return DROP
+        
+    elif update.message.text == '❌ Cancel':
+        # User cancelled address typing
+        kb = ReplyKeyboardMarkup([
+            [KeyboardButton('📍 Share Drop-off Location', request_location=True)],
+            ['📝 Type Drop-off Address'],
+            ['⏩ Skip Drop-off']
+        ], one_time_keyboard=True, resize_keyboard=True)
+        await update.message.reply_text(
+            'Drop-off location selection:',
+            reply_markup=kb
+        )
+        return DROP
+        
     else:
-        text = (update.message.text or '').strip()
-        if text.lower() == 'skip':
-            context.user_data['drop_lat'] = None
-            context.user_data['drop_lng'] = None
-            context.user_data.pop('drop_text', None)
-        else:
-            context.user_data['drop_lat'] = None
-            context.user_data['drop_lng'] = None
-            context.user_data['drop_text'] = text
-    await update.message.reply_text('How many people in your group?', reply_markup=group_size_buttons())
+        # User typed an address
+        context.user_data['drop_lat'] = None
+        context.user_data['drop_lng'] = None
+        context.user_data['drop_text'] = update.message.text.strip()
+        drop_info = f"📍 Drop-off: {update.message.text.strip()}"
+    
+    # Proceed to group size selection
+    await update.message.reply_text(
+        f'{drop_info}\n\n👥 How many people in your group?',
+        reply_markup=group_size_buttons()
+    )
     return GROUP
 
 async def group_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle group size selection"""
     query = update.callback_query
     await query.answer()
+    
     _, num = query.data.split(':')
     context.user_data['group_size'] = int(num)
+    
+    # Build confirmation message
     p_lat = context.user_data.get('pickup_lat')
     p_lng = context.user_data.get('pickup_lng')
     d_lat = context.user_data.get('drop_lat')
     d_lng = context.user_data.get('drop_lng')
     d_text = context.user_data.get('drop_text')
     group = context.user_data.get('group_size')
-    summary = f"Please confirm your request:\nPickup: ({p_lat:.5f}, {p_lng:.5f})\n"
+    
+    summary = "🚖 **Please confirm your ride request:**\n\n"
+    summary += f"📍 **Pickup:** ({p_lat:.5f}, {p_lng:.5f})\n"
+    
     if d_lat and d_lng:
-        summary += f"Drop: ({d_lat:.5f}, {d_lng:.5f})\n"
+        summary += f"🎯 **Drop-off:** ({d_lat:.5f}, {d_lng:.5f})\n"
     elif d_text:
-        summary += f"Drop (text): {d_text}\n"
+        summary += f"🎯 **Drop-off:** {d_text}\n"
     else:
-        summary += 'Drop: Not provided\n'
-    summary += f'Group size: {group}\nPayment: Cash'
+        summary += "🎯 **Drop-off:** Not specified\n"
+        
+    summary += f"👥 **Group size:** {group} people\n"
+    summary += "💵 **Payment:** Cash"
+    
     await query.edit_message_text(summary, reply_markup=confirm_buttons())
     return CONFIRM
 
 async def confirm_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle ride confirmation"""
     query = update.callback_query
     await query.answer()
+    
     if query.data == 'confirm:no':
-        await query.edit_message_text('Request cancelled.', reply_markup=main_menu_keyboard())
+        await query.edit_message_text('❌ Ride request cancelled.', reply_markup=main_menu_keyboard())
         return ConversationHandler.END
+        
+    # Create ride in database
     db = context.bot_data.get('db')
     dispatch_chat = await db.get_setting('dispatch_chat_id')
+    
     if not dispatch_chat:
-        await query.edit_message_text('Dispatch group not set. Admin must run /set_dispatch_group in the driver group.', reply_markup=main_menu_keyboard())
+        await query.edit_message_text(
+            '❌ Dispatch group not set. Admin must run /set_dispatch_group in the driver group.',
+            reply_markup=main_menu_keyboard()
+        )
         return ConversationHandler.END
+        
     rider_id = query.from_user.id
     pickup_lat = context.user_data.get('pickup_lat')
     pickup_lng = context.user_data.get('pickup_lng')
@@ -81,31 +156,65 @@ async def confirm_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     drop_lng = context.user_data.get('drop_lng')
     drop_text = context.user_data.get('drop_text')
     group_size = context.user_data.get('group_size', 1)
+    
     try:
-        ride_id = await db.create_ride(rider_tg_id=rider_id, pickup_lat=pickup_lat, pickup_lng=pickup_lng, drop_lat=drop_lat, drop_lng=drop_lng, drop_text=drop_text, group_size=group_size)
+        ride_id = await db.create_ride(
+            rider_tg_id=rider_id, 
+            pickup_lat=pickup_lat, 
+            pickup_lng=pickup_lng, 
+            drop_lat=drop_lat, 
+            drop_lng=drop_lng, 
+            drop_text=drop_text, 
+            group_size=group_size
+        )
     except Exception as e:
         logger.exception('Failed to create ride in DB: %s', e)
-        await query.edit_message_text('Failed to create ride. Try again later.', reply_markup=main_menu_keyboard())
+        await query.edit_message_text('❌ Failed to create ride. Please try again later.', reply_markup=main_menu_keyboard())
         return ConversationHandler.END
-    await query.edit_message_text('Searching for a driver nearby... ✅')
-    rider_name = query.from_user.first_name or ''
-    dispatch_text = f"🚖 New Ride Request (ID:{ride_id})\nRider: {rider_name} (tg: {rider_id})\nPickup: ({pickup_lat:.5f}, {pickup_lng:.5f})\nGroup size: {group_size}\nPayment: Cash"
+    
+    await query.edit_message_text('🔍 Searching for a driver nearby...')
+    
+    # Prepare dispatch message
+    rider_name = query.from_user.first_name or 'User'
+    dispatch_text = f"🚖 **New Ride Request** (ID: {ride_id})\n\n"
+    dispatch_text += f"👤 **Rider:** {rider_name} (ID: {rider_id})\n"
+    dispatch_text += f"📍 **Pickup:** ({pickup_lat:.5f}, {pickup_lng:.5f})\n"
+    dispatch_text += f"👥 **Group size:** {group_size}\n"
+    
     if drop_text:
-        dispatch_text += f"\nDrop (text): {drop_text}"
+        dispatch_text += f"🎯 **Drop-off:** {drop_text}\n"
     elif drop_lat and drop_lng:
-        dispatch_text += f"\nDrop: ({drop_lat:.5f}, {drop_lng:.5f})"
+        dispatch_text += f"🎯 **Drop-off:** ({drop_lat:.5f}, {drop_lng:.5f})\n"
+    else:
+        dispatch_text += "🎯 **Drop-off:** Not specified\n"
+        
+    dispatch_text += "💵 **Payment:** Cash"
+    
     kb = accept_button_for_ride(ride_id)
+    
     try:
-        await context.bot.send_message(chat_id=int(dispatch_chat), text=dispatch_text, reply_markup=kb)
-        await context.bot.send_message(chat_id=rider_id, text='✅ Request posted to drivers. We\'ll notify you when someone accepts.', reply_markup=main_menu_keyboard())
+        await context.bot.send_message(
+            chat_id=int(dispatch_chat), 
+            text=dispatch_text, 
+            reply_markup=kb
+        )
+        await context.bot.send_message(
+            chat_id=rider_id, 
+            text='✅ Your ride request has been posted to drivers! We\'ll notify you when a driver accepts.',
+            reply_markup=main_menu_keyboard()
+        )
     except Exception as e:
         logger.warning('Failed to post to dispatch or notify rider: %s', e)
+        await query.edit_message_text('❌ Failed to post ride request. Please try again.', reply_markup=main_menu_keyboard())
+    
     return ConversationHandler.END
 
 async def cancel_conv(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text('Request cancelled.', reply_markup=main_menu_keyboard())
+    """Cancel the conversation"""
+    await update.message.reply_text('❌ Ride request cancelled.', reply_markup=main_menu_keyboard())
     return ConversationHandler.END
 
+# ... rest of your existing functions (accept_callback, go_online, complete_ride_cmd) remain the same
 async def accept_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -156,21 +265,6 @@ async def go_online(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await db.set_driver_status(tg_id, 'online')
     kb = mk_location_keyboard()
     await update.message.reply_text('You\'re now ONLINE. Please share your current location so the system can find you for nearby rides.', reply_markup=kb)
-
-# FIX: This was the problematic global location handler that interfered with conversations
-# async def location_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-#     if not update.message.location:
-#         await update.message.reply_text('Please use the location sharing button.')
-#         return
-#     user = update.effective_user
-#     loc = update.message.location
-#     db = context.bot_data.get('db')
-#     drv = await db.get_driver_by_tg(user.id)
-#     if drv:
-#         await db.update_driver_location(user.id, loc.latitude, loc.longitude)
-#         await update.message.reply_text('Location updated.', reply_markup=main_menu_keyboard())
-#     else:
-#         await update.message.reply_text('Location received.', reply_markup=main_menu_keyboard())
 
 async def complete_ride_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     args = context.args
