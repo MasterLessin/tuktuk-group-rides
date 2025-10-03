@@ -1,6 +1,4 @@
-python-telegram-bot==20.3
-APScheduler
-python-telegram-bot
-psycopg2-binary
-asyncpg
-
+python-telegram-bot==20.7
+asyncpg==0.29.0
+nest_asyncio==1.6.0
+python-dotenv==1.0.1
