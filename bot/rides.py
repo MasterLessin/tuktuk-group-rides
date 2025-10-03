@@ -157,19 +157,20 @@ async def go_online(update: Update, context: ContextTypes.DEFAULT_TYPE):
     kb = mk_location_keyboard()
     await update.message.reply_text('You\'re now ONLINE. Please share your current location so the system can find you for nearby rides.', reply_markup=kb)
 
-async def location_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message.location:
-        await update.message.reply_text('Please use the location sharing button.')
-        return
-    user = update.effective_user
-    loc = update.message.location
-    db = context.bot_data.get('db')
-    drv = await db.get_driver_by_tg(user.id)
-    if drv:
-        await db.update_driver_location(user.id, loc.latitude, loc.longitude)
-        await update.message.reply_text('Location updated.', reply_markup=main_menu_keyboard())
-    else:
-        await update.message.reply_text('Location received.', reply_markup=main_menu_keyboard())
+# FIX: This was the problematic global location handler that interfered with conversations
+# async def location_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+#     if not update.message.location:
+#         await update.message.reply_text('Please use the location sharing button.')
+#         return
+#     user = update.effective_user
+#     loc = update.message.location
+#     db = context.bot_data.get('db')
+#     drv = await db.get_driver_by_tg(user.id)
+#     if drv:
+#         await db.update_driver_location(user.id, loc.latitude, loc.longitude)
+#         await update.message.reply_text('Location updated.', reply_markup=main_menu_keyboard())
+#     else:
+#         await update.message.reply_text('Location received.', reply_markup=main_menu_keyboard())
 
 async def complete_ride_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     args = context.args
