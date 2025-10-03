@@ -4,22 +4,13 @@ from telegram.ext import (
 from telegram import Update
 from telegram.ext import ContextTypes
 from . import registration, rides, ride_history, admin
-from .utils import main_menu_keyboard, driver_main_menu_keyboard, rider_driver_choice_keyboard, cancel_keyboard, back_to_main_keyboard, mk_location_keyboard
+from .utils import main_menu_keyboard, driver_main_menu_keyboard, cancel_keyboard
 
 # New handler functions
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Start command with role selection"""
+    """Start command that goes straight to rider menu"""
     welcome_text = """
-🤖 Welcome to TukTuk Group Rides!
-
-Are you looking for a ride or are you a driver?
-    """
-    await update.message.reply_text(welcome_text, reply_markup=rider_driver_choice_keyboard())
-
-async def start_as_rider(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Start as rider"""
-    welcome_text = """
-🚖 Welcome Rider!
+🚖 Welcome to TukTuk Group Rides!
 
 You can:
 - Request a group ride
@@ -58,11 +49,11 @@ Choose an option below:
 
 async def back_to_main(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Return to main menu"""
-    await start_as_rider(update, context)
+    await start_command(update, context)
 
 async def switch_to_rider(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Switch from driver to rider interface"""
-    await start_as_rider(update, context)
+    await start_command(update, context)
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Help command"""
@@ -105,6 +96,7 @@ Safe, reliable, and convenient tuktuk services!
 
 async def request_location_update(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Request location update from driver"""
+    from .utils import mk_location_keyboard
     await update.message.reply_text(
         "Please share your current location:",
         reply_markup=mk_location_keyboard()
@@ -121,7 +113,7 @@ def register_handlers(app, db, admin_id):
     app.bot_data['db'] = db
     app.bot_data['admin_id'] = admin_id
 
-    # Start command with role selection
+    # Start command - goes straight to rider menu
     app.add_handler(CommandHandler('start', start_command))
     app.add_handler(MessageHandler(filters.Regex(r'^⬅️ Back to Main Menu$'), back_to_main))
     app.add_handler(MessageHandler(filters.Regex(r'^👤 Switch to Rider$'), switch_to_rider))
@@ -132,9 +124,10 @@ def register_handlers(app, db, admin_id):
     app.add_handler(MessageHandler(filters.Regex(r'^🆘 Help$'), help_command))
     app.add_handler(MessageHandler(filters.Regex(r'^ℹ️ About$'), about_command))
     
+    # Driver access handler
+    app.add_handler(MessageHandler(filters.Regex(r'^👨‍✈️ Driver Mode$'), start_as_driver))
+    
     # Driver menu handlers  
-    app.add_handler(MessageHandler(filters.Regex(r'^🚖 I\'m a Rider$'), start_as_rider))
-    app.add_handler(MessageHandler(filters.Regex(r'^👨‍✈️ I\'m a Driver$'), start_as_driver))
     app.add_handler(MessageHandler(filters.Regex(r'^🟢 Go Online$'), rides.go_online))
     app.add_handler(MessageHandler(filters.Regex(r'^📍 Update Location$'), request_location_update))
     app.add_handler(MessageHandler(filters.Regex(r'^📊 My Jobs$'), driver_jobs))
@@ -155,7 +148,7 @@ def register_handlers(app, db, admin_id):
 
     # ride conversation
     ride_conv = ConversationHandler(
-        entry_points=[CommandHandler('request', rides.request_start), MessageHandler(filters.Regex(r'^Request Group Ride$'), rides.request_start)],
+        entry_points=[CommandHandler('request', rides.request_start), MessageHandler(filters.Regex(r'^🚖 Request Ride$'), rides.request_start)],
         states={
             rides.PICKUP: [MessageHandler(filters.LOCATION, rides.pickup_received)],
             rides.DROP: [MessageHandler(filters.LOCATION | filters.Regex('^Skip$') | filters.TEXT, rides.drop_received)],
@@ -171,6 +164,9 @@ def register_handlers(app, db, admin_id):
     app.add_handler(CommandHandler('set_dispatch_group', admin.set_dispatch_group))
     app.add_handler(CommandHandler('broadcast', admin.broadcast))
     app.add_handler(CommandHandler('complete_ride', rides.complete_ride_cmd))
-    app.add_handler(MessageHandler(filters.LOCATION, rides.location_handler))
+    
+    # FIX: Remove the global location handler that was interfering with conversation
+    # app.add_handler(MessageHandler(filters.LOCATION, rides.location_handler))  # REMOVED
+    
     app.add_handler(CallbackQueryHandler(rides.accept_callback, pattern='^accept:'))
     app.add_handler(CallbackQueryHandler(ride_history.history_callback, pattern='^history:'))
