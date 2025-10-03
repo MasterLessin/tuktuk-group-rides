@@ -146,12 +146,21 @@ def register_handlers(app, db, admin_id):
     )
     app.add_handler(reg_conv)
 
-    # ride conversation
+    # ride conversation - UPDATED with proper filters
     ride_conv = ConversationHandler(
-        entry_points=[CommandHandler('request', rides.request_start), MessageHandler(filters.Regex(r'^🚖 Request Ride$'), rides.request_start)],
+        entry_points=[
+            CommandHandler('request', rides.request_start), 
+            MessageHandler(filters.Regex(r'^🚖 Request Ride$'), rides.request_start)
+        ],
         states={
-            rides.PICKUP: [MessageHandler(filters.LOCATION, rides.pickup_received)],
-            rides.DROP: [MessageHandler(filters.LOCATION | filters.Regex('^Skip$') | filters.TEXT, rides.drop_received)],
+            rides.PICKUP: [
+                MessageHandler(filters.LOCATION, rides.pickup_received),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, rides.pickup_received)
+            ],
+            rides.DROP: [
+                MessageHandler(filters.LOCATION, rides.drop_received),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, rides.drop_received)
+            ],
             rides.GROUP: [CallbackQueryHandler(rides.group_callback, pattern='^group:')],
             rides.CONFIRM: [CallbackQueryHandler(rides.confirm_callback, pattern='^confirm:')],
         },
