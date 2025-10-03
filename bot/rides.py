@@ -1,7 +1,7 @@
 import logging, time
 from telegram import Update, KeyboardButton, ReplyKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler, MessageHandler, filters
-from .utils import mk_location_keyboard, group_size_buttons, confirm_buttons, accept_button_for_ride
+from .utils import mk_location_keyboard, group_size_buttons, confirm_buttons, accept_button_for_ride, main_menu_keyboard
 logger = logging.getLogger('tuktuk_rides')
 
 PICKUP, DROP, GROUP, CONFIRM = range(4)
@@ -67,12 +67,12 @@ async def confirm_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     if query.data == 'confirm:no':
-        await query.edit_message_text('Request cancelled.')
+        await query.edit_message_text('Request cancelled.', reply_markup=main_menu_keyboard())
         return ConversationHandler.END
     db = context.bot_data.get('db')
     dispatch_chat = await db.get_setting('dispatch_chat_id')
     if not dispatch_chat:
-        await query.edit_message_text('Dispatch group not set. Admin must run /set_dispatch_group in the driver group.')
+        await query.edit_message_text('Dispatch group not set. Admin must run /set_dispatch_group in the driver group.', reply_markup=main_menu_keyboard())
         return ConversationHandler.END
     rider_id = query.from_user.id
     pickup_lat = context.user_data.get('pickup_lat')
@@ -85,7 +85,7 @@ async def confirm_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ride_id = await db.create_ride(rider_tg_id=rider_id, pickup_lat=pickup_lat, pickup_lng=pickup_lng, drop_lat=drop_lat, drop_lng=drop_lng, drop_text=drop_text, group_size=group_size)
     except Exception as e:
         logger.exception('Failed to create ride in DB: %s', e)
-        await query.edit_message_text('Failed to create ride. Try again later.')
+        await query.edit_message_text('Failed to create ride. Try again later.', reply_markup=main_menu_keyboard())
         return ConversationHandler.END
     await query.edit_message_text('Searching for a driver nearby... ✅')
     rider_name = query.from_user.first_name or ''
@@ -97,13 +97,13 @@ async def confirm_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     kb = accept_button_for_ride(ride_id)
     try:
         await context.bot.send_message(chat_id=int(dispatch_chat), text=dispatch_text, reply_markup=kb)
-        await context.bot.send_message(chat_id=rider_id, text='Request posted to drivers. We\'ll notify you when someone accepts.')
+        await context.bot.send_message(chat_id=rider_id, text='✅ Request posted to drivers. We\'ll notify you when someone accepts.', reply_markup=main_menu_keyboard())
     except Exception as e:
         logger.warning('Failed to post to dispatch or notify rider: %s', e)
     return ConversationHandler.END
 
 async def cancel_conv(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text('Request cancelled.')
+    await update.message.reply_text('Request cancelled.', reply_markup=main_menu_keyboard())
     return ConversationHandler.END
 
 async def accept_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -138,11 +138,11 @@ async def accept_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception:
         pass
     try:
-        await context.bot.send_message(chat_id=rider_tg_id, text=f"Driver assigned ✅\nName: {drv.get('name','')}\nPhone: {drv.get('phone','')}\nVehicle: {drv.get('reg_no','')}\nPlease wait for the driver to arrive.")
+        await context.bot.send_message(chat_id=rider_tg_id, text=f"Driver assigned ✅\nName: {drv.get('name','')}\nPhone: {drv.get('phone','')}\nVehicle: {drv.get('reg_no','')}\nPlease wait for the driver to arrive.", reply_markup=main_menu_keyboard())
     except Exception as e:
         logger.warning('Failed to notify rider: %s', e)
     try:
-        await context.bot.send_message(chat_id=user.id, text=f"You accepted ride {ride_id}.\nPickup coords: ({ride['pickup_lat']:.5f}, {ride['pickup_lng']:.5f})\nUse /complete_ride {ride_id} when done.")
+        await context.bot.send_message(chat_id=user.id, text=f"You accepted ride {ride_id}.\nPickup coords: ({ride['pickup_lat']:.5f}, {ride['pickup_lng']:.5f})\nUse /complete_ride {ride_id} when done.", reply_markup=main_menu_keyboard())
     except Exception as e:
         logger.warning('Failed to DM driver: %s', e)
 
@@ -151,7 +151,7 @@ async def go_online(update: Update, context: ContextTypes.DEFAULT_TYPE):
     db = context.bot_data.get('db')
     drv = await db.get_driver_by_tg(tg_id)
     if not drv:
-        await update.message.reply_text('You\'re not registered. Run /driver_start to register first.')
+        await update.message.reply_text('You\'re not registered. Run /driver_start to register first.', reply_markup=main_menu_keyboard())
         return
     await db.set_driver_status(tg_id, 'online')
     kb = mk_location_keyboard()
@@ -167,9 +167,9 @@ async def location_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     drv = await db.get_driver_by_tg(user.id)
     if drv:
         await db.update_driver_location(user.id, loc.latitude, loc.longitude)
-        await update.message.reply_text('Location updated.')
+        await update.message.reply_text('Location updated.', reply_markup=main_menu_keyboard())
     else:
-        await update.message.reply_text('Location received.')
+        await update.message.reply_text('Location received.', reply_markup=main_menu_keyboard())
 
 async def complete_ride_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     args = context.args
@@ -183,4 +183,4 @@ async def complete_ride_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     db = context.bot_data.get('db')
     await db.set_ride_status(ride_id, 'completed')
-    await update.message.reply_text(f'Ride {ride_id} marked as completed. Thanks!')
+    await update.message.reply_text(f'Ride {ride_id} marked as completed. Thanks!', reply_markup=main_menu_keyboard())
